@@ -1,0 +1,41 @@
+Declare @BankId int
+
+Set @BankId = 13  --- Buraya hangi bankanýn accountu alýnacaksa onun BankIdsi yazýlýr. SELECT * from BankAccounts (nolock) querysinden bakýlarak alýnýr.
+
+select  m.MemberId
+		,m.Name +' ' +m.LastName AdSoyad
+		,'' VergiNumarasi
+		,'' VergiDairesi
+		,m.Id TcNo
+		,m.Address Adresi
+		,'' BabaAdi
+		,Convert (nvarchar(10),m.BirthDate,104) DogumTarihi
+		,m.MobilePhone Telefonu
+		,m.EMail EPosta
+		,bb.BankId BankaKodu
+		,bb.BranchCode SubeKodu
+		,mba.AccountCode HesapNumarasi
+		,mba.IBAN IBAN
+		,'TL' DovizKodu
+from Members m(nolock)
+	,MemberBankAccounts mba (nolock)
+	,BankBranchs bb (nolock)
+where mba.MemberId=m.MemberId 
+		and mba.Status=1
+		and bb.BankBranchId=mba.BankBranchId 
+		and bb.BankId= @BankId
+group by m.MemberId
+		,m.Name +' ' +m.LastName 
+		,m.Id 
+		,m.Address 
+		,m.BirthDate
+		,m.MobilePhone 
+		,m.EMail 
+		,bb.BankId 
+		,bb.BranchCode 
+		,mba.AccountCode 
+		,mba.IBAN 
+--Inner Join MemberAccounts ma (nolock) on ma.MemberId=m.MemberId
+--Inner join MemberBankAccounts mba (nolock) on mba.MemberId=m.MemberId and mba.Status=1
+--Inner join BankBranchs bb (nolock) on bb.BankBranchId=mba.BankBranchId and bb.BankId= @BankId
+Order by m.Name +' ' +m.LastName 
