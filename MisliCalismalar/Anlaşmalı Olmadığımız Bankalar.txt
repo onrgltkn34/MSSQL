@@ -1,0 +1,102 @@
+Declare @StartDate datetime,@EndDate datetime, @MemberId int
+	
+	set @StartDate='05.01.2011'
+	set @EndDate='05.31.2011'
+	set @MemberID='0'
+	
+	
+Begin  
+ if(@StartDate is null)  
+ Begin  
+  Select PaybackId, Date, Payback, CurrencyCode, MPT.AccountName,   
+  (  
+   Select Status From MemberPaybackTransactionLogs(nolock)   
+   Where PaybackId = MPT.PaybackId  
+   And   Date = (Select Max(Date) From MemberPaybackTransactionLogs(nolock) Where PaybackId = MPT.PaybackId)  
+  ) Status,  
+  (  
+   Select Description From MemberPaybackTransactionLogs(nolock)   
+   Where PaybackId = MPT.PaybackId  
+   And   Date = (Select Max(Date) From MemberPaybackTransactionLogs(nolock) Where PaybackId = MPT.PaybackId)  
+  ) Description,
+  B1.BankName MemberBankName,
+  B2.BankName PaymentBankName
+  From   MemberPaybackTransactions MPT(nolock)   
+  Inner Join MemberBankAccounts MBA(nolock) On MPT.MemberBankAccountId = MBA.MemberBankAccountId  
+  Inner Join Currencies C(nolock) On C.CurrencyId = MPT.CurrencyId  
+  Left Join BankBranchs BB(nolock) ON MPT.BankBranchId = BB.BankBranchId
+  Left Join Banks B1(nolock) ON BB.BankId = B1.BankId 
+  Left Join BankAccounts BA(nolock) ON MPT.PaymentBankAccountId = BA.AccountId
+  Left Join Banks B2(nolock) ON BA.BankId = B2.BankId
+  Where MPT.AccountId in (Select AccountId From MemberAccounts(nolock) Where MemberId = @MemberId)  
+  Order By Date Desc  
+ End  
+ Else  
+ Begin  
+  Select PaybackId, Date, Payback, CurrencyCode, MPT.AccountName,   
+  (  
+   Select Status From MemberPaybackTransactionLogs(nolock)   
+   Where PaybackId = MPT.PaybackId  
+   And   Date = (Select Max(Date) From MemberPaybackTransactionLogs(nolock) Where PaybackId = MPT.PaybackId)  
+  ) Status,  
+  (  
+   Select Description From MemberPaybackTransactionLogs(nolock)   
+   Where PaybackId = MPT.PaybackId  
+   And   Date = (Select Max(Date) From MemberPaybackTransactionLogs(nolock) Where PaybackId = MPT.PaybackId)  
+  ) Description,
+  B1.BankName MemberBankName,
+  B2.BankName PaymentBankName
+  
+  Into #temp
+  
+  
+  From   MemberPaybackTransactions MPT(nolock)   
+  Inner Join MemberBankAccounts MBA(nolock) On MPT.MemberBankAccountId = MBA.MemberBankAccountId  
+  Inner Join Currencies C(nolock) On C.CurrencyId = MPT.CurrencyId  
+  Left Join BankBranchs BB(nolock) ON MPT.BankBranchId = BB.BankBranchId
+  Left Join Banks B1(nolock) ON BB.BankId = B1.BankId 
+  Left Join BankAccounts BA(nolock) ON MPT.PaymentBankAccountId = BA.AccountId
+  Left Join Banks B2(nolock) ON BA.BankId = B2.BankId  
+  Where MPT.AccountId in (Select AccountId From MemberAccounts(nolock) Where MemberId > @MemberId)  
+  And   MPT.Date Between @StartDate And @EndDate
+  Order By Date Desc  
+ End  
+End  
+
+select COUNT(*) TransactionCount,SUM(payback) from #temp
+where MemberBankName not in (			
+			'YAPI VE KREDI BANKASI A.S.',
+			'T.GARANTÝ BANKASI A.S.',
+			'AKBANK T.A.S.',
+			'DENIZ BANK A.S.',
+			'T.EKONOMÝ BANKASI A.S.',
+			'T.IÞ BANKASI A.S.',
+			'FINANSBANK A.S.',
+			'ING BANK A.S.',
+			'TEKSTIL BANKASI A.S.',
+			'ÞEKERBANK T.A.S.',
+			'FORTISBANK (TEB) A.S.',
+			'HSBC BANK A.S.'
+			)
+		and status = 6
+		
+select PaybackId,CONVERT(nvarchar(19),Date,120) Date,Payback,AccountName,MemberBankName,PaymentBankName 
+from #temp
+where MemberBankName not in (			
+			'YAPI VE KREDI BANKASI A.S.',
+			'T.GARANTÝ BANKASI A.S.',
+			'AKBANK T.A.S.',
+			'DENIZ BANK A.S.',
+			'T.EKONOMÝ BANKASI A.S.',
+			'T.IÞ BANKASI A.S.',
+			'FINANSBANK A.S.',
+			'ING BANK A.S.',
+			'TEKSTIL BANKASI A.S.',
+			'ÞEKERBANK T.A.S.',
+			'FORTISBANK (TEB) A.S.',
+			'HSBC BANK A.S.'
+			)
+		and status = 6
+order by payback
+
+drop table #temp
