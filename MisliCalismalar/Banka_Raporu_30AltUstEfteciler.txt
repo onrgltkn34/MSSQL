@@ -1,0 +1,266 @@
+Declare  @StartDate datetime,@EndDate datetime,@DayNumber int,@x int
+
+Set @StartDate='03.01.2011' -- (MM-DD-YYYY)
+Set @EndDate='04.11.2011'
+
+Create table #tmpTable
+(
+	StartDate date,
+	EndDate date,
+	ToplamislemAdedi int,
+	ToplamTutar money,
+	OrtDakika decimal(18,2),
+	limitUstuEFT int,
+	limitDigerEFT int
+)
+
+Set @DayNumber=datediff (dd,@StartDate,@EndDate) -- Kaç günlük almak istiyorsak buraya sayý ile belirtilir.
+Set @x =0
+set @EndDate=@StartDate+1
+WHILE @x<@DayNumber
+Begin 
+
+If (@x !=0)
+Begin
+	Set @StartDate=DATEADD (Day,1,@StartDate)
+	Set @EndDate =DATEADD (Day,1,@EndDate)
+End
+
+Select 
+			count(*) transactionCount,
+			isnull(Sum(AT.Credit),0) sumDebit
+			--,Max(date) maxDate
+			--,AT.AccountId
+			--,BB.BranchName
+			--,B.BankName
+			--,A.AccountCode
+			--,BA.BankAccountType
+	Into #tmp1
+	From 
+			AccountTransactions (Nolock) AT,
+			Accounts(Nolock) A,
+			BankAccounts(Nolock) BA ,
+			Banks(Nolock) B,
+			BankBranchs(Nolock) BB
+	Where 
+			AT.TransactionType=8
+			And A.AccountId=AT.AccountId
+			And BA.AccountId=A.AccountId
+			And B.BankId=BA.BankId
+			And BA.BankAccountType=2
+			And BB.BankBranchId=BA.BankBranchId
+			And Date>= @StartDate 
+			And Date<= @EndDate
+	
+	Group by AT.AccountId,BB.BranchName,
+			B.BankName,
+			A.AccountCode,
+			BA.BankAccountType
+
+	
+
+
+
+
+begin
+declare @reportTime int,
+		@avgMinute decimal(18,2),
+		@limitCountEFT int,
+		@limitCountOperations int
+		
+set @reportTime=9
+
+ 
+
+if @StartDate is null begin
+set @StartDate=Convert(date, GETDATE())
+end 
+if @EndDate is null begin
+set @EndDate=DATEADD(day,1,@StartDate)
+end 
+ 
+ select @avgMinute=AVG(T1.DiffMinute)  from (
+select 
+MPT.PaybackId, 
+COUNT(*) Counts,
+ (Case 
+ when DateName(HOUR,MIN(MPT.Date))<@reportTime then 
+ 	Dateadd(HOUR,@reportTime,Convert(datetime,Convert(date, MIN(MPT.Date))))
+ else 
+	 MIN(MPT.Date) 
+	  end )
+	  MinDate,
+ (Case 
+ 	when DateName(HOUR,MAX(MPT.Date))<@reportTime then 
+ 		Dateadd(HOUR,@reportTime,Convert(datetime,Convert(date, MAX(MPT.Date))))
+ 	else 
+	 MAX(MPT.Date) 
+	 end ) 
+	 MaxDate,
+Convert(decimal,DATEDIFF(SECOND,'1900-01-01',(
+ Case 
+ 	when DateName(HOUR,MAX(MPT.Date))<@reportTime then 
+ 		Dateadd(HOUR,@reportTime,Convert(datetime,Convert(date, MAX(MPT.Date))))
+ 	else 
+	 MAX(MPT.Date) 
+	 end
+	  )-(
+ Case 
+ 	when DateName(HOUR,MIN(MPT.Date))<@reportTime then 
+ 	Dateadd(HOUR,@reportTime,Convert(datetime,Convert(date, MIN(MPT.Date))))
+ else 
+	 MIN(MPT.Date) 
+	 end 
+	 )
+))/60 DiffMinute
+from 
+MemberPaybackTransactionLogs(Nolock) MPT
+where 
+MPT.Date between @StartDate and @EndDate
+and Status not in (1,2,3,5,7)
+group by MPT.PaybackId
+having COUNT(*)>2
+  ) t1 where t1.DiffMinute>0
+  
+set @reportTime=10
+
+select @limitCountEFT=Sum(Case when PaybackType='EFT' then 1 else 0 end) ,@limitCountOperations=Sum(Case when PaybackType='NotEFT' then 1 else 0 end) from (
+select 'EFT' PaybackType,
+MPT.PaybackId, MA.MemberId,
+COUNT(*) Counts,
+(Case 
+ when DateName(HOUR,MIN(MPT.Date))<@reportTime then 
+ 	Dateadd(HOUR,@reportTime,Convert(datetime,Convert(date, MIN(MPT.Date))))
+ else 
+	 MIN(MPT.Date) 
+	  end )
+	  MinDate,
+ (Case 
+ 	when DateName(HOUR,MAX(MPT.Date))<@reportTime then 
+ 		Dateadd(HOUR,@reportTime,Convert(datetime,Convert(date, MAX(MPT.Date))))
+ 	else 
+	 MAX(MPT.Date) 
+	 end ) 
+	 MaxDate,
+Convert(decimal,DATEDIFF(SECOND,'1900-01-01',(
+ Case 
+ 	when DateName(HOUR,MAX(MPT.Date))<@reportTime then 
+ 		Dateadd(HOUR,@reportTime,Convert(datetime,Convert(date, MAX(MPT.Date))))
+ 	else 
+	 MAX(MPT.Date) 
+	 end
+	  )-(
+ Case 
+ 	when DateName(HOUR,MIN(MPT.Date))<@reportTime then 
+ 	Dateadd(HOUR,@reportTime,Convert(datetime,Convert(date, MIN(MPT.Date))))
+ else 
+	 MIN(MPT.Date) 
+	 end 
+	 )
+))/60 DiffMinute
+from 
+MemberPaybackTransactionLogs(Nolock) MPT,
+MemberPaybackTransactions(Nolock) MPTT,
+MemberAccounts MA(Nolock)
+left  join MemberProperties MP(Nolock)  on MP.MemberId=MA.MemberId  
+where 
+MPT.Date between @StartDate and @EndDate
+and MPTT.PaybackId=MPT.PaybackId
+and MA.AccountId=MPTT.AccountId
+and MPT.Status not in (1,2,3,5,7)
+and  MP.Description  like '%EFT%' 
+group by MPT.PaybackId,MA.MemberId
+having Convert(decimal,DATEDIFF(SECOND,'1900-01-01',(Case 
+	when DateName(HOUR,MAX(MPT.Date))<@reportTime then 
+		Dateadd(HOUR,@reportTime,Convert(datetime,Convert(date, MAX(MPT.Date))))
+	else 
+	 MAX(MPT.Date) 
+	 end )-
+(Case 
+	when DateName(HOUR,MIN(MPT.Date))<@reportTime then 
+		Dateadd(HOUR,@reportTime,Convert(datetime,Convert(date, MIN(MPT.Date))))
+	else 
+	 MIN(MPT.Date) 
+	 end )
+))/60>30 and COUNT(*)>2
+union all	 
+select 'NotEFT' PaybackType,
+MPT.PaybackId, MA.MemberId,
+COUNT(*) Counts,
+(Case 
+ when DateName(HOUR,MIN(MPT.Date))<@reportTime then 
+ 	Dateadd(HOUR,@reportTime,Convert(datetime,Convert(date, MIN(MPT.Date))))
+ else 
+	 MIN(MPT.Date) 
+	  end )
+	  MinDate,
+ (Case 
+ 	when DateName(HOUR,MAX(MPT.Date))<@reportTime then 
+ 		Dateadd(HOUR,@reportTime,Convert(datetime,Convert(date, MAX(MPT.Date))))
+ 	else 
+	 MAX(MPT.Date) 
+	 end ) 
+	 MaxDate,
+Convert(decimal,DATEDIFF(SECOND,'1900-01-01',(
+ Case 
+ 	when DateName(HOUR,MAX(MPT.Date))<@reportTime then 
+ 		Dateadd(HOUR,@reportTime,Convert(datetime,Convert(date, MAX(MPT.Date))))
+ 	else 
+	 MAX(MPT.Date) 
+	 end
+	  )-(
+ Case 
+ 	when DateName(HOUR,MIN(MPT.Date))<@reportTime then 
+ 	Dateadd(HOUR,@reportTime,Convert(datetime,Convert(date, MIN(MPT.Date))))
+ else 
+	 MIN(MPT.Date) 
+	 end 
+	 )
+))/60 DiffMinute
+from 
+MemberPaybackTransactionLogs(Nolock) MPT,
+MemberPaybackTransactions(Nolock) MPTT,
+MemberAccounts MA(Nolock)
+left  join MemberProperties MP(Nolock)  on MP.MemberId=MA.MemberId 
+where 
+MPT.Date between @StartDate and @EndDate
+and MPTT.PaybackId=MPT.PaybackId
+and MA.AccountId=MPTT.AccountId
+and MPT.Status not in (1,2,3,5,7)
+and (MP.Description is null or MP.Description not like '%EFT%')
+group by  MPT.PaybackId,MA.MemberId
+having Convert(decimal,DATEDIFF(SECOND,'1900-01-01',(Case 
+	when DateName(HOUR,MAX(MPT.Date))<@reportTime then 
+		Dateadd(HOUR,@reportTime,Convert(datetime,Convert(date, MAX(MPT.Date))))
+	else 
+	 MAX(MPT.Date) 
+	 end )-
+(Case 
+	when DateName(HOUR,MIN(MPT.Date))<@reportTime then 
+		Dateadd(HOUR,@reportTime,Convert(datetime,Convert(date,MIN(MPT.Date))))
+	else 
+	 MIN(MPT.Date) 
+	 end )))/60>30 and COUNT(*)>2
+ 
+) t1
+
+	 
+--select isnull(@avgMinute,0) AvgMinute,isnull(@limitCountEFT,0) LimitCountEFT,isnull(@limitCountOperations,0) LimitCountOperations
+
+			Insert Into  #tmpTable
+					select  @StartDate StartDate
+					,@EndDate EndDate
+					,SUM(transactionCount) ToplamislemAdedi
+					,SUM(sumDebit) ToplamTutar
+					,isnull(@avgMinute,0) OrtDakika
+					,isnull(@limitCountEFT,0) limitUstuEFT
+					,isnull(@limitCountOperations,0) limitDigerEFT 
+			from #tmp1
+
+	END
+	Set @x+=1;
+	drop table #tmp1
+END
+
+Select * from #tmpTable
+drop table #tmpTable
